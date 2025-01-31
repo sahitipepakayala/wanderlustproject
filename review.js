@@ -1,23 +1,15 @@
-const mongoose=require("mongoose");
+const express=require("express");
+const router=express.Router({mergeParams:true});
+const {reviewschema}=require("../schema.js");
+const listing=require("../models/listing.js");
+const review=require("../models/review.js");
+const wrapAsync=require("../util/wrapAsync.js");
+const ExpressError=require("../util/ExpressError.js");
+const {validatereview,isloggedin,isauthor}=require("../middleware.js");
+const controlreview=require("../controllers/review.js");
 
-let reviewschema=new mongoose.Schema({
-  
-    content:{type:String,
-        required:true,
-    },
-    rating:{
-        type:Number,
-        min:1,
-        max:5,
-    },
-    created_on:{
-        type:Date,
-        default:Date.now(),
-    },
-    author:{
-        type:mongoose.Schema.Types.ObjectId,
-            ref:"user",
-    }
-})
 
-module.exports=new mongoose.model("Review",reviewschema);
+router.post("/",isloggedin,validatereview,wrapAsync(controlreview.newreview));
+router.delete("/:reviewId",isloggedin,isauthor,wrapAsync(controlreview.deletereview));
+
+module.exports=router;

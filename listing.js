@@ -1,44 +1,87 @@
-const mongoose=require("mongoose");
-const review=require("./review.js");
+const express=require("express");
+const router=express.Router();
+
+const wrapAsync=require("../util/wrapAsync.js");
+const ExpressError=require("../util/ExpressError");
+const listing=require("../models/listing.js");
+const {validatelisting,isloggedin,isOwner}=require("../middleware.js");
+
+const controllisting=require("../controllers/listing.js");
+const multer  = require('multer') ;
+const {storage}=require("../cloudconfig.js")
+const upload = multer({ storage})
 
 
+router
+.route("/")
+ .post(isloggedin,validatelisting,upload.single("listing[image]"),wrapAsync(controllisting.postlisting))
+.get(wrapAsync(controllisting.index))
 
-const listing_schema= new mongoose.Schema({
-    title:{
-        type:String,
-        required:true
-    },
-    description:String,
-    image:{
-           url:String,
-           filename:String
-          },
-        price:{
-            type:Number,
-            default:1000,
-            // min: [50, "Price must be at least 50"],
-        },
-        type1:{
-            type:String,
-            required:true,
-            default:"temple"
-        },
-        location:String,
-        country:String,
-        reviews:[{
-            type:mongoose.Schema.Types.ObjectId,
-            ref:"Review",
-        }],
-        owner:{
-            type:mongoose.Schema.Types.ObjectId,
-            ref:"user",
-        }
-});
-listing_schema.post("findOneAndDelete",async(listing)=>{
-    if(listing)
+//new
+router.get("/new",isloggedin,(req,res)=>{
+ 
+    res.render("./listings/new.ejs");
+})
+router.get("/search",async (req,res)=>{
+    try{
+    let srch=req.query.query;
+    console.log(srch);
+    if(!srch)
     {
-   await review.deleteMany({_id:{$in:listing.reviews}});
+        req.flash("error","SEARCH NOT FOUND");
+        res.send("/listings");
+    }
+    let results = await listing.find({
+        $or: [
+            { title: { $regex: srch, $options: "i" } }, 
+            { location: { $regex: srch, $options: "i" } },
+            { country: { $regex: srch, $options: "i" } }
+        ]
+    });
+    console.log(results);
+    if(results.length===0)
+    {
+        req.flash("error","SEARCH NOT FOUND");
+        res.redirect("/listings");
+    }
+    res.render("listings/search.ejs",{results,srch});
+    } catch (error) {
+        console.error(error);
+        req.flash("error", "Something went wrong. Please try again.");
+        res.redirect("/listings");
+    }
+
+})
+
+router.get('/filter', async (req, res) => {
+    const { type1 } = req.query;
+    try {
+        const filteredListings = await listing.find({ type1:type1});
+        if(filteredListings.length==0)
+        {
+            return res.redirect("/listings");
+        }
+        res.render('listings/index', { alldata: filteredListings });
+    } catch (error) {
+        console.error(error);
+        res.status(500).send('Server Error');
     }
 });
-const Listing=mongoose.model("Listing",listing_schema);
-module.exports=Listing;
+router 
+.route("/:id")
+.get(wrapAsync(controllisting.showroute)) //show
+.put(isloggedin,isOwner,validatelisting,upload.single("listing[image]"),wrapAsync(controllisting.updatelisting))//update
+.delete(isloggedin,isOwner,validatelisting,wrapAsync(controllisting.deletelisting));//dlt
+
+
+//edit
+router.get("/:id/edit",isloggedin,validatelisting,wrapAsync(controllisting.editlisting));
+
+
+module.exports=router;
+
+
+
+
+
+
